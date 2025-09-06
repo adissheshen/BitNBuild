@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FinLife Simulator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .metric-bar-bg { background-color: #374151; }
+        .metric-bar { transition: width 0.5s ease-in-out; }
+        .modal { transition: opacity 0.3s ease-in-out, transform 0.3s ease-in-out; }
+        .fade-in { opacity: 1; transform: scale(1); }
+        .fade-out { opacity: 0; transform: scale(0.95); pointer-events: none; }
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3b82f6;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        #log-entries-container::-webkit-scrollbar, #chapters-list::-webkit-scrollbar { width: 8px; }
+        #log-entries-container::-webkit-scrollbar-track, #chapters-list::-webkit-scrollbar-track { background: #2d3748; }
+        #log-entries-container::-webkit-scrollbar-thumb, #chapters-list::-webkit-scrollbar-thumb { background: #4a5568; border-radius: 4px; }
+        #log-entries-container::-webkit-scrollbar-thumb:hover, #chapters-list::-webkit-scrollbar-thumb:hover { background: #718096; }
+        .hidden { display: none; }
+    </style>
+</head>
+<body class="bg-gray-900 text-white flex items-center justify-center min-h-screen p-4">
+
+    <div id="app-container" class="w-full max-w-2xl mx-auto">
+
+        <!-- Login Screen -->
+        <div id="login-screen" class="bg-gray-800 p-8 rounded-2xl shadow-2xl">
+            <h1 class="text-3xl font-bold text-blue-400 mb-4 text-center">Welcome to FinLife</h1>
+            <p class="text-gray-400 mb-6 text-center">Create an account to save your progress or play as a guest.</p>
+            <div class="space-y-4">
+                <input type="email" id="email" placeholder="Email" class="w-full p-3 bg-gray-700 rounded-lg border border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <input type="password" id="password" placeholder="Password" class="w-full p-3 bg-gray-700 rounded-lg border border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500" type="password">
+                <p id="auth-error" class="text-red-400 text-sm h-4"></p>
+                <button id="login-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg transition">Log In</button>
+                <button id="signup-btn" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-lg transition">Sign Up</button>
+                <button id="guest-play-btn" class="w-full bg-gray-600 hover:bg-gray-700 text-white font-bold py-3 rounded-lg transition">Play as Guest</button>
+            </div>
+        </div>
+        
+        <!-- Chapter Selection Screen -->
+        <div id="chapter-selection-screen" class="hidden bg-gray-800 p-8 rounded-2xl shadow-2xl">
+            <div class="flex justify-between items-center mb-6">
+                <h1 class="text-3xl font-bold text-blue-400">Your Chapters</h1>
+                <button id="logout-btn" class="text-sm bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded-lg transition">Logout</button>
+            </div>
+            <div id="chapters-list" class="space-y-3 max-h-80 overflow-y-auto pr-2">
+                <!-- Chapters will be loaded here -->
+            </div>
+             <div id="chapters-loader" class="hidden flex justify-center py-6"><div class="loader"></div></div>
+            <button id="new-chapter-btn" class="w-full mt-6 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg transition">Start a New Chapter</button>
+        </div>
+
+        <!-- Role Selection Screen -->
+        <div id="role-selection-screen" class="hidden bg-gray-800 p-8 rounded-2xl shadow-2xl text-center">
+            <h1 class="text-3xl font-bold text-blue-400 mb-2">Choose Your Path</h1>
+            <p id="role-screen-subtitle" class="text-gray-400 mb-6">Select a starting role for this chapter.</p>
+            <div id="roles-loader" class="hidden flex flex-col items-center justify-center my-6">
+                <div class="loader"></div>
+                <p class="text-gray-400 mt-4">Generating starting roles...</p>
+            </div>
+            <div id="roles-container" class="space-y-4"></div>
+             <button id="back-to-chapters-btn" class="w-full mt-6 bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg">Back to Chapters</button>
+        </div>
+
+        <!-- Game Screen -->
+        <div id="game-screen" class="hidden">
+            <div class="bg-gray-800 p-4 sm:p-6 rounded-2xl shadow-lg mb-6">
+                 <div class="flex justify-between items-center mb-4">
+                    <div>
+                        <h2 class="text-xl sm:text-2xl font-bold text-gray-200">Day <span id="day-counter">1</span></h2>
+                        <p class="text-sm text-blue-300" id="player-role-display"></p>
+                    </div>
+                    <div class="flex items-center">
+                        <button id="log-button" class="text-sm bg-gray-700 hover:bg-gray-600 text-blue-300 font-semibold py-2 px-4 rounded-lg transition-colors mr-2">📖 Log</button>
+                        <button id="exit-game-btn" class="text-sm bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded-lg transition">Exit</button>
+                    </div>
+                </div>
+                 <div class="flex justify-between items-baseline mb-4">
+                     <p class="text-lg sm:text-xl font-semibold text-green-400">Wealth: $<span id="wealth-value">0</span></p>
+                 </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <div class="flex justify-between items-center mb-1"><span class="text-sm font-medium text-red-400">❤️ Health</span><span class="text-sm font-medium text-gray-300"><span id="health-value">0</span> / 100</span></div>
+                        <div class="w-full metric-bar-bg rounded-full h-2.5"><div id="health-bar" class="bg-red-500 h-2.5 rounded-full" style="width: 0%"></div></div>
+                    </div>
+                    <div>
+                        <div class="flex justify-between items-center mb-1"><span class="text-sm font-medium text-yellow-400">🤝 Social</span><span class="text-sm font-medium text-gray-300"><span id="social-value">0</span> / 100</span></div>
+                        <div class="w-full metric-bar-bg rounded-full h-2.5"><div id="social-bar" class="bg-yellow-500 h-2.5 rounded-full" style="width: 0%"></div></div>
+                    </div>
+                </div>
+            </div>
+            <div id="decision-container" class="bg-gray-800 p-6 sm:p-8 rounded-2xl shadow-lg">
+                <div id="scenario-loader" class="flex flex-col items-center justify-center min-h-[200px]"><div class="loader"></div><p class="text-gray-400 mt-4">Generating your next life event...</p></div>
+                <div id="scenario-content" class="hidden"><p id="scenario-text" class="text-lg text-gray-300 mb-6 leading-relaxed"></p><div id="options-container" class="space-y-3"></div></div>
+            </div>
+        </div>
+
+        <!-- Modals -->
+        <div id="explanation-modal" class="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center p-4 modal fade-out">
+            <div class="bg-gray-800 rounded-2xl shadow-2xl p-8 max-w-lg w-full transform transition-all"><h3 class="text-2xl font-bold text-blue-400 mb-4">The Financial Lesson</h3><p id="explanation-text" class="text-gray-300 mb-6"></p><button id="continue-button" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition-transform transform hover:scale-105">Continue</button></div>
+        </div>
+        <div id="game-over-modal" class="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center p-4 modal fade-out">
+            <div class="bg-gray-800 rounded-2xl shadow-2xl p-8 max-w-lg w-full text-center transform transition-all"><h3 class="text-3xl font-bold text-red-500 mb-4">Chapter Over</h3><p id="game-over-message" class="text-gray-300 text-lg mb-6"></p><button id="restart-button" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition-transform transform hover:scale-105">Back to Chapters</button></div>
+        </div>
+        <div id="progress-log-modal" class="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center p-4 modal fade-out">
+            <div class="bg-gray-800 rounded-2xl shadow-2xl p-8 max-w-2xl w-full transform transition-all flex flex-col h-[80vh]"><div class="flex justify-between items-center mb-4 flex-shrink-0"><h3 class="text-2xl font-bold text-blue-400">Progress Log</h3><button id="close-log-button" class="text-2xl text-gray-400 hover:text-white leading-none">&times;</button></div><div id="log-entries-container" class="space-y-4 overflow-y-auto pr-2 flex-grow"></div></div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, getDoc, setDoc, addDoc, collection, getDocs, deleteDoc, query } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // --- Firebase & App Config ---
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'finlife-dev';
+        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        
+        // --- DOM Elements ---
+        const screens = { login: document.getElementById('login-screen'), chapters: document.getElementById('chapter-selection-screen'), roles: document.getElementById('role-selection-screen'), game: document.getElementById('game-screen') };
+        const emailEl = document.getElementById('email'), passwordEl = document.getElementById('password'), authErrorEl = document.getElementById('auth-error');
+        const loginBtn = document.getElementById('login-btn'), signupBtn = document.getElementById('signup-btn'), guestPlayBtn = document.getElementById('guest-play-btn'), logoutBtn = document.getElementById('logout-btn'), newChapterBtn = document.getElementById('new-chapter-btn'), backToChaptersBtn = document.getElementById('back-to-chapters-btn'), exitGameBtn = document.getElementById('exit-game-btn');
+        const chaptersList = document.getElementById('chapters-list'), chaptersLoader = document.getElementById('chapters-loader'), rolesLoader = document.getElementById('roles-loader'), rolesContainer = document.getElementById('roles-container'), playerRoleDisplay = document.getElementById('player-role-display');
+        const dayCounter = document.getElementById('day-counter'), wealthValueEl = document.getElementById('wealth-value'), healthValueEl = document.getElementById('health-value'), socialValueEl = document.getElementById('social-value'), healthBar = document.getElementById('health-bar'), socialBar = document.getElementById('social-bar'), scenarioLoader = document.getElementById('scenario-loader'), scenarioContent = document.getElementById('scenario-content'), scenarioText = document.getElementById('scenario-text'), optionsContainer = document.getElementById('options-container');
+        const explanationModal = document.getElementById('explanation-modal'), explanationText = document.getElementById('explanation-text'), continueButton = document.getElementById('continue-button');
+        const gameOverModal = document.getElementById('game-over-modal'), gameOverMessage = document.getElementById('game-over-message'), restartButton = document.getElementById('restart-button');
+        const progressLogModal = document.getElementById('progress-log-modal'), closeLogButton = document.getElementById('close-log-button'), logEntriesContainer = document.getElementById('log-entries-container'), logButton = document.getElementById('log-button');
+        
+        // --- Game State ---
+        let gameState = {};
+        let currentUser = null;
+        let currentChapterId = null;
+
+        // --- Screen Management ---
+        function showScreen(screenName) {
+            Object.values(screens).forEach(screen => screen.classList.add('hidden'));
+            if (screens[screenName]) screens[screenName].classList.remove('hidden');
+        }
+        
+        // --- Auth Logic ---
+        onAuthStateChanged(auth, user => {
+            currentUser = user;
+            if (user) {
+                showScreen('chapters');
+                fetchChapters();
+            } else {
+                showScreen('login');
+                currentChapterId = null;
+            }
+        });
+
+        async function handleAuthAction(action, email, password) {
+            authErrorEl.textContent = '';
+            if (!email || !password) {
+                authErrorEl.textContent = "Email and password cannot be empty.";
+                return;
+            }
+            try {
+                await action(auth, email, password);
+            } catch (error) {
+                authErrorEl.textContent = error.message.replace('Firebase: ', '');
+            }
+        }
+        loginBtn.addEventListener('click', () => handleAuthAction(signInWithEmailAndPassword, emailEl.value, passwordEl.value));
+        signupBtn.addEventListener('click', () => handleAuthAction(createUserWithEmailAndPassword, emailEl.value, passwordEl.value));
+        logoutBtn.addEventListener('click', () => signOut(auth));
+        guestPlayBtn.addEventListener('click', () => signInAnonymously(auth).catch(err => authErrorEl.textContent = "Guest mode failed. Please try again."));
+
+        // --- Chapter Management ---
+        async function fetchChapters() {
+            if (!currentUser) return;
+            chaptersLoader.classList.remove('hidden');
+            chaptersList.innerHTML = '';
+            try {
+                const chaptersRef = collection(db, 'artifacts', appId, 'users', currentUser.uid, 'chapters');
+                const querySnapshot = await getDocs(query(chaptersRef));
+                if (querySnapshot.empty) {
+                    chaptersList.innerHTML = '<p class="text-center text-gray-500">No chapters yet. Start a new one!</p>';
+                } else {
+                    querySnapshot.docs.forEach(doc => renderChapter(doc.id, doc.data()));
+                }
+            } catch (error) {
+                console.error("Error fetching chapters:", error);
+                chaptersList.innerHTML = '<p class="text-center text-red-500">Could not load chapters.</p>';
+            } finally {
+                chaptersLoader.classList.add('hidden');
+            }
+        }
+
+        function renderChapter(id, data) {
+            const chapterEl = document.createElement('div');
+            chapterEl.className = 'bg-gray-700 p-4 rounded-lg flex justify-between items-center';
+            chapterEl.innerHTML = `
+                <div>
+                    <h3 class="font-bold text-lg text-blue-300">${data.playerRole}</h3>
+                    <p class="text-sm text-gray-400">Day: ${data.day} | Wealth: $${data.wealth.toLocaleString()}</p>
+                </div>
+                <div class="flex items-center">
+                    <button data-id="${id}" class="continue-btn bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded-lg transition mr-2">Continue</button>
+                    <button data-id="${id}" class="delete-btn text-red-400 hover:text-red-200 font-bold py-2 px-2 rounded-lg transition">&times;</button>
+                </div>
+            `;
+            chaptersList.appendChild(chapterEl);
+        }
+
+        chaptersList.addEventListener('click', async (e) => {
+            const chapterId = e.target.dataset.id;
+            if (!chapterId) return;
+
+            if (e.target.classList.contains('continue-btn')) {
+                await continueChapter(chapterId);
+            }
+            if (e.target.classList.contains('delete-btn')) {
+                if (confirm("Are you sure you want to delete this chapter? This cannot be undone.")) {
+                    await deleteDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'chapters', chapterId));
+                    await fetchChapters(); // Refresh list
+                }
+            }
+        });
+        
+        async function continueChapter(chapterId) {
+            const docRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'chapters', chapterId);
+            const docSnap = await getDoc(docRef);
+            if (docSnap.exists()) {
+                gameState = docSnap.data();
+                currentChapterId = chapterId;
+                // BUG FIX: Ensure UI is updated immediately upon loading a chapter
+                updateAllUI();
+                showScreen('game');
+                presentNewDecision();
+            } else {
+                console.error("Chapter not found!");
+                await fetchChapters(); // Refresh list if chapter is missing
+            }
+        }
+
+        newChapterBtn.addEventListener('click', () => { showScreen('roles'); fetchStartingRoles(); });
+        backToChaptersBtn.addEventListener('click', () => showScreen('chapters'));
+        exitGameBtn.addEventListener('click', async () => { await saveGameProgress(); showScreen('chapters'); await fetchChapters(); });
+        
+        // --- Game Logic ---
+        async function fetchFromAPI(systemPrompt, userQuery) {
+            const apiKey = ""; 
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+            const payload = { contents: [{ parts: [{ text: userQuery }] }], systemInstruction: { parts: [{ text: systemPrompt }] }, };
+            try {
+                const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                if (!response.ok) throw new Error(`API error: ${response.statusText}`);
+                const result = await response.json();
+                const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
+                if (text) {
+                    const jsonString = text.match(/```json\n([\s\S]*?)\n```/)?.[1] || text.substring(text.indexOf('{'), text.lastIndexOf('}') + 1) || text.substring(text.indexOf('['), text.lastIndexOf(']') + 1);
+                    return JSON.parse(jsonString);
+                }
+                throw new Error("Invalid or empty response from API.");
+            } catch (error) { console.error("API call failed:", error); return null; }
+        }
+
+        // Three distinct, saved roles as a reliable fallback.
+        const fallbackRoles = [
+            { name: "New Grad", description: "Fresh out of college, you have a new job, some savings, but also student debt.", stats: { wealth: 15000, health: 85, social: 70 } },
+            { name: "Freelance Artist", description: "You follow your passion for art. Your income is project-based and can be unpredictable.", stats: { wealth: 8000, health: 75, social: 80 } },
+            { name: "Apprentice Trader", description: "You've landed a high-stress, high-reward job at a trading firm. You start with capital but also high pressure.", stats: { wealth: 50000, health: 65, social: 55 } }
+        ];
+
+        async function fetchStartingRoles() {
+            rolesLoader.classList.remove('hidden');
+            rolesContainer.innerHTML = '';
+            const systemPrompt = `You are a game designer. Generate 3 diverse starting roles for a financial life simulator game. Each role needs a name, a brief description, and starting stats for wealth, health, and social (1-100). Respond ONLY with a valid JSON array of objects. Schema: [{"name": "string", "description": "string", "stats": {"wealth": integer, "health": integer, "social": integer}}]`;
+            const roles = await fetchFromAPI(systemPrompt, "Generate 3 starting roles.");
+            rolesLoader.classList.add('hidden');
+            displayRoles((roles && roles.length) ? roles : fallbackRoles);
+        }
+
+        function displayRoles(roles) {
+            rolesContainer.innerHTML = '';
+            roles.forEach(role => {
+                const button = document.createElement('button');
+                button.className = 'w-full text-left bg-gray-700 hover:bg-gray-600 p-4 rounded-lg transition-colors';
+                button.innerHTML = `<h3 class="font-bold text-lg text-blue-300">${role.name}</h3><p class="text-sm text-gray-400">${role.description}</p><div class="text-xs mt-2 text-gray-500">Wealth: $${role.stats.wealth.toLocaleString()} | Health: ${role.stats.health} | Social: ${role.stats.social}</div>`;
+                button.onclick = () => createNewChapter(role);
+                rolesContainer.appendChild(button);
+            });
+        }
+        
+        async function createNewChapter(role) {
+            if (!currentUser) return;
+            gameState = {
+                day: 1, wealth: role.stats.wealth, health: role.stats.health, social: role.stats.social,
+                decisionsMadeToday: 0, isGameOver: false, progressLog: [], playerRole: role.name,
+            };
+            try {
+                const chaptersRef = collection(db, 'artifacts', appId, 'users', currentUser.uid, 'chapters');
+                const docRef = await addDoc(chaptersRef, gameState);
+                currentChapterId = docRef.id;
+                // BUG FIX: Ensure UI is updated immediately upon creating a chapter
+                updateAllUI();
+                showScreen('game');
+                presentNewDecision();
+            } catch (error) {
+                console.error("Error creating new chapter:", error);
+            }
+        }
+
+        async function saveGameProgress() {
+            if (!currentUser || !currentChapterId || gameState.isGameOver) return;
+            const docRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'chapters', currentChapterId);
+            await setDoc(docRef, gameState).catch(err => console.error("Failed to save progress:", err));
+        }
+
+        async function fetchDecisionFromAPI() {
+            showLoader();
+            // IMPROVEMENT: More detailed and role-specific prompt for the AI.
+            const systemPrompt = `You are a financial education game master for 'FinLife Simulator'.
+            Your primary task is to generate a realistic life scenario that is DIRECTLY related to the player's chosen role: "${gameState.playerRole}".
+            The situation must reflect the unique challenges, opportunities, and daily life of that role.
+            For example:
+            - A 'Freelance Artist' should face decisions about client payments, buying supplies, or pricing their work.
+            - An 'Apprentice Trader' should get scenarios about market news, risk management, or specific investment types.
+            - A 'New Grad' should deal with student loans, creating a first budget, or navigating employee benefits.
+            
+            Complexity should increase with the day number. Current date is ${new Date().toLocaleDateString()}.
+            Provide a scenario, three distinct choices with effects on wealth, health, and social, a concise educational explanation, and a relevant topic.
+            
+            IMPORTANT: Respond ONLY with a valid JSON object inside a markdown block.
+            Schema:
+            \`\`\`json
+            {
+              "scenario": "string",
+              "options": [
+                { "text": "string", "effects": { "wealth": integer, "health": integer, "social": integer }, "explanation": "string", "topic": "string" }
+              ]
+            }
+            \`\`\`
+            `;
+            const userQuery = `Current game state: Day: ${gameState.day}, Wealth: ${gameState.wealth}, Health: ${gameState.health}, Social: ${gameState.social}. Generate the next role-specific scenario.`;
+            
+            const decision = await fetchFromAPI(systemPrompt, userQuery);
+            if (decision && decision.scenario && decision.options && Array.isArray(decision.options) && decision.options.length > 0) {
+                return decision;
+            }
+            console.error("Malformed decision from API, using fallback.", decision);
+            return {
+                scenario: "An unexpected server error occurred while planning your day. How do you manage your finances in the meantime?",
+                options: [ { text: "Use a pre-made spreadsheet on your computer.", effects: { wealth: 0, health: -2, social: -1 }, explanation: "Having an offline backup for your budget is a reliable practice that reduces stress and ensures you always have access to your financial plan.", topic: "Budgeting Tools" }, { text: "Just wait, hoping the service comes back online soon.", effects: { wealth: 0, health: -5, social: 0 }, explanation: "Relying on a single, internet-dependent tool for financial management can be risky. Diversifying your methods is crucial for resilience.", topic: "Financial Planning" }, { text: "Postpone financial tasks for today.", effects: { wealth: -50, health: -3, social: 0 }, explanation: "Procrastinating on financial duties, even for a day, can lead to missed payments or opportunities, adding to mental stress. Consistency is key.", topic: "Financial Discipline" } ]
+            };
+        }
+
+        async function presentNewDecision() {
+            const decision = await fetchDecisionFromAPI();
+            scenarioText.textContent = decision.scenario;
+            optionsContainer.innerHTML = '';
+            decision.options.forEach(option => {
+                const button = document.createElement('button');
+                button.className = "w-full text-left bg-gray-700 hover:bg-gray-600 p-4 rounded-lg transition-colors";
+                button.innerHTML = `<span class="font-medium">${option.text}</span>`;
+                button.onclick = () => handlePlayerChoice(decision.scenario, option);
+                optionsContainer.appendChild(button);
+            });
+            hideLoader();
+        }
+        
+        function handlePlayerChoice(scenario, option) {
+            Array.from(optionsContainer.children).forEach(button => button.disabled = true);
+            gameState.wealth += option.effects.wealth || 0;
+            gameState.health = Math.max(0, Math.min(100, gameState.health + (option.effects.health || 0)));
+            gameState.social = Math.max(0, Math.min(100, gameState.social + (option.effects.social || 0)));
+            gameState.progressLog.push({ day: gameState.day, scenario, choice: option.text, effects: option.effects, lesson: option.explanation, topic: option.topic || 'General Finance' });
+            updateStatsUI();
+            explanationText.textContent = option.explanation;
+            showModal(explanationModal);
+            checkGameOver();
+        }
+
+        function advanceDay() {
+            gameState.decisionsMadeToday++;
+            const decisionsPerDay = (gameState.day <= 10) ? 1 : (gameState.day <= 40) ? 2 : (gameState.day <= 90) ? 3 : 4;
+            if (gameState.decisionsMadeToday >= decisionsPerDay) {
+                gameState.day++;
+                gameState.decisionsMadeToday = 0;
+            }
+            if (!gameState.isGameOver) {
+                saveGameProgress();
+                presentNewDecision();
+            }
+        }
+        
+        async function checkGameOver() {
+            let reason = '';
+            if (gameState.wealth <= 0) reason = "You've gone broke! Managing your wealth is key to financial stability.";
+            else if (gameState.health <= 0) reason = "Your health has reached zero. Remember that wealth is meaningless without health.";
+            else if (gameState.social <= 0) reason = "Your social standing has collapsed. A strong network is a valuable asset.";
+            
+            if (reason) {
+                gameState.isGameOver = true;
+                gameOverMessage.textContent = reason;
+                setTimeout(() => { closeModal(explanationModal); showModal(gameOverModal); }, 1500);
+            }
+        }
+
+        // --- UI Update & Event Listeners ---
+        function updateAllUI() {
+            updateStatsUI();
+            playerRoleDisplay.textContent = gameState.playerRole || 'Adventurer';
+        }
+        function updateStatsUI() { dayCounter.textContent = gameState.day; wealthValueEl.textContent = gameState.wealth.toLocaleString(); healthValueEl.textContent = gameState.health; socialValueEl.textContent = gameState.social; healthBar.style.width = `${gameState.health}%`; socialBar.style.width = `${gameState.social}%`; }
+        function showModal(modal) { modal.classList.remove('fade-out'); modal.classList.add('fade-in'); }
+        function closeModal(modal) { modal.classList.remove('fade-in'); modal.classList.add('fade-out'); }
+        function showLoader() { scenarioLoader.style.display = 'flex'; scenarioContent.style.display = 'none'; }
+        function hideLoader() { scenarioLoader.style.display = 'none'; scenarioContent.style.display = 'block'; }
+        function renderProgressLog() {
+             logEntriesContainer.innerHTML = '';
+            if (!gameState.progressLog || gameState.progressLog.length === 0) { logEntriesContainer.innerHTML = '<p class="text-gray-500 text-center">No decisions logged for this chapter yet.</p>'; return; }
+            [...gameState.progressLog].reverse().forEach(entry => {
+                const effectsString = `Wealth: ${entry.effects.wealth > 0 ? '+' : ''}${entry.effects.wealth}, Health: ${entry.effects.health > 0 ? '+' : ''}${entry.effects.health}, Social: ${entry.effects.social > 0 ? '+' : ''}${entry.effects.social}`;
+                const entryEl = document.createElement('div');
+                entryEl.className = 'bg-gray-700 p-4 rounded-lg';
+                entryEl.innerHTML = `<div class="flex justify-between items-center mb-2"><h4 class="font-bold text-lg">Day ${entry.day}</h4><span class="text-xs font-semibold bg-blue-900 text-blue-300 py-1 px-2 rounded-full">${entry.topic}</span></div><p class="text-sm text-gray-400 mb-2 italic">"${entry.scenario}"</p><p class="text-sm mb-2"><strong class="font-semibold text-gray-200">Your Choice:</strong> ${entry.choice}</p><p class="text-sm mb-3"><strong class="font-semibold text-gray-200">Outcome:</strong> ${effectsString}</p><p class="text-xs bg-gray-900/50 p-2 rounded"><strong class="font-semibold text-blue-300">Lesson:</strong> ${entry.lesson}</p>`;
+                logEntriesContainer.appendChild(entryEl);
+            });
+        }
+        
+        continueButton.addEventListener('click', () => { closeModal(explanationModal); if (!gameState.isGameOver) { setTimeout(advanceDay, 300); } });
+        restartButton.addEventListener('click', () => { closeModal(gameOverModal); showScreen('chapters'); fetchChapters(); });
+        logButton.addEventListener('click', () => { renderProgressLog(); showModal(progressLogModal); });
+        closeLogButton.addEventListener('click', () => closeModal(progressLogModal));
+        
+        // --- Initial Load ---
+        showScreen('login');
+    </script>
+</body>
+</html>
+
