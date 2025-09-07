@@ -41,7 +41,7 @@
             <p class="text-gray-400 mb-6 text-center">Create an account to save your progress or play as a guest.</p>
             <div class="space-y-4">
                 <input type="email" id="email" placeholder="Email" class="w-full p-3 bg-gray-700 rounded-lg border border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                <input type="password" id="password" placeholder="Password" class="w-full p-3 bg-gray-700 rounded-lg border border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500" type="password">
+                <input id="password" placeholder="Password" class="w-full p-3 bg-gray-700 rounded-lg border border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500" type="password">
                 <p id="auth-error" class="text-red-400 text-sm h-4"></p>
                 <button id="login-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg transition">Log In</button>
                 <button id="signup-btn" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-lg transition">Sign Up</button>
@@ -221,14 +221,11 @@
         chaptersList.addEventListener('click', async (e) => {
             const chapterId = e.target.dataset.id;
             if (!chapterId) return;
-
-            if (e.target.classList.contains('continue-btn')) {
-                await continueChapter(chapterId);
-            }
+            if (e.target.classList.contains('continue-btn')) await continueChapter(chapterId);
             if (e.target.classList.contains('delete-btn')) {
-                if (confirm("Are you sure you want to delete this chapter? This cannot be undone.")) {
+                if (window.confirm("Are you sure you want to delete this chapter? This cannot be undone.")) {
                     await deleteDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'chapters', chapterId));
-                    await fetchChapters(); // Refresh list
+                    await fetchChapters();
                 }
             }
         });
@@ -239,13 +236,12 @@
             if (docSnap.exists()) {
                 gameState = docSnap.data();
                 currentChapterId = chapterId;
-                // BUG FIX: Ensure UI is updated immediately upon loading a chapter
                 updateAllUI();
                 showScreen('game');
                 presentNewDecision();
             } else {
                 console.error("Chapter not found!");
-                await fetchChapters(); // Refresh list if chapter is missing
+                await fetchChapters();
             }
         }
 
@@ -271,18 +267,23 @@
             } catch (error) { console.error("API call failed:", error); return null; }
         }
 
-        // Three distinct, saved roles as a reliable fallback.
         const fallbackRoles = [
-            { name: "New Grad", description: "Fresh out of college, you have a new job, some savings, but also student debt.", stats: { wealth: 15000, health: 85, social: 70 } },
-            { name: "Freelance Artist", description: "You follow your passion for art. Your income is project-based and can be unpredictable.", stats: { wealth: 8000, health: 75, social: 80 } },
-            { name: "Apprentice Trader", description: "You've landed a high-stress, high-reward job at a trading firm. You start with capital but also high pressure.", stats: { wealth: 50000, health: 65, social: 55 } }
+            { name: "New Grad", description: "Fresh out of college with a new tech job, some savings, and student debt to manage.", stats: { wealth: 45000, health: 85, social: 70 } },
+            { name: "Freelance Artist", description: "You follow your passion for art. Your income is project-based, requiring careful budgeting.", stats: { wealth: 25000, health: 75, social: 80 } },
+            { name: "Apprentice Trader", description: "A high-stress, high-reward job at a trading firm. You start with significant capital but also high pressure.", stats: { wealth: 80000, health: 65, social: 55 } }
         ];
 
         async function fetchStartingRoles() {
             rolesLoader.classList.remove('hidden');
             rolesContainer.innerHTML = '';
-            const systemPrompt = `You are a game designer. Generate 3 diverse starting roles for a financial life simulator game. Each role needs a name, a brief description, and starting stats for wealth, health, and social (1-100). Respond ONLY with a valid JSON array of objects. Schema: [{"name": "string", "description": "string", "stats": {"wealth": integer, "health": integer, "social": integer}}]`;
-            const roles = await fetchFromAPI(systemPrompt, "Generate 3 starting roles.");
+            // BUG FIX: Added a strict minimum wealth requirement to the AI prompt.
+            const systemPrompt = `You are a game designer. Generate 3 diverse starting roles for a financial life simulator game. Each role needs a name, a brief description, and starting stats.
+            CRITICAL INSTRUCTIONS:
+            - The 'wealth' value for each role MUST be realistic and logically consistent with the role's description. For example, a 'Trust Fund Kid' should have very high wealth (e.g., > 200,000), while a 'Daily Wage Worker' should have very low, but still playable, wealth (e.g., 500-1500). A 'New Grad' might have a moderate amount (e.g., 20,000-50,000). Ensure the wealth makes sense for the character.
+            - 'health' and 'social' stats must be integers between 50 and 95.
+            Respond ONLY with a valid JSON array of objects.
+            Schema: [{"name": "string", "description": "string", "stats": {"wealth": integer, "health": integer, "social": integer}}]`;
+            const roles = await fetchFromAPI(systemPrompt, "Generate 3 starting roles with contextually appropriate starting wealth.");
             rolesLoader.classList.add('hidden');
             displayRoles((roles && roles.length) ? roles : fallbackRoles);
         }
@@ -308,7 +309,6 @@
                 const chaptersRef = collection(db, 'artifacts', appId, 'users', currentUser.uid, 'chapters');
                 const docRef = await addDoc(chaptersRef, gameState);
                 currentChapterId = docRef.id;
-                // BUG FIX: Ensure UI is updated immediately upon creating a chapter
                 updateAllUI();
                 showScreen('game');
                 presentNewDecision();
@@ -325,17 +325,14 @@
 
         async function fetchDecisionFromAPI() {
             showLoader();
-            // IMPROVEMENT: More detailed and role-specific prompt for the AI.
-            const systemPrompt = `You are a financial education game master for 'FinLife Simulator'.
-            Your primary task is to generate a realistic life scenario that is DIRECTLY related to the player's chosen role: "${gameState.playerRole}".
-            The situation must reflect the unique challenges, opportunities, and daily life of that role.
-            For example:
-            - A 'Freelance Artist' should face decisions about client payments, buying supplies, or pricing their work.
-            - An 'Apprentice Trader' should get scenarios about market news, risk management, or specific investment types.
-            - A 'New Grad' should deal with student loans, creating a first budget, or navigating employee benefits.
+            const systemPrompt = `You are a financial education game master. Your primary task is to generate a realistic life scenario that is a logical continuation of the player's journey.
             
-            Complexity should increase with the day number. Current date is ${new Date().toLocaleDateString()}.
-            Provide a scenario, three distinct choices with effects on wealth, health, and social, a concise educational explanation, and a relevant topic.
+            CRITICAL CONTEXT & RULES:
+            1. Time Progression: The game progresses one day at a time. The current day is Day ${gameState.day}. Your scenario MUST NOT mention longer time periods like "weeks" or "months" passing, especially in early days. The scenario should be a single event for this specific day.
+            2. Player's Role: "${gameState.playerRole}". The scenario MUST be directly related to the unique challenges and opportunities of this role.
+            3. Player's History: The player has already made several decisions. The next scenario should feel like a natural progression. Avoid repeating topics unless it makes sense as a follow-up. Analyze their recent choices to inform the next event.
+            
+            Your task is to generate a new scenario with three distinct choices. Provide a concise, educational explanation and a relevant topic for the financial concept.
             
             IMPORTANT: Respond ONLY with a valid JSON object inside a markdown block.
             Schema:
@@ -348,7 +345,8 @@
             }
             \`\`\`
             `;
-            const userQuery = `Current game state: Day: ${gameState.day}, Wealth: ${gameState.wealth}, Health: ${gameState.health}, Social: ${gameState.social}. Generate the next role-specific scenario.`;
+            const recentLog = gameState.progressLog.slice(-3).map(entry => `Day ${entry.day} (${entry.topic}): ${entry.choice}`).join('; ');
+            const userQuery = `The player is on Day ${gameState.day}. Their role is "${gameState.playerRole}". Current wealth is ${gameState.wealth}. Recent decisions: [${recentLog || 'None yet'}]. Generate the next role-specific and logical daily scenario.`;
             
             const decision = await fetchFromAPI(systemPrompt, userQuery);
             if (decision && decision.scenario && decision.options && Array.isArray(decision.options) && decision.options.length > 0) {
@@ -445,4 +443,3 @@
     </script>
 </body>
 </html>
-
